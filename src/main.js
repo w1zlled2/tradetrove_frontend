@@ -7,6 +7,8 @@ import { fas } from '@fortawesome/free-solid-svg-icons';
 import { far } from '@fortawesome/free-regular-svg-icons';
 import { fab } from '@fortawesome/free-brands-svg-icons';
 import { createPinia } from 'pinia';
+import config from '../config';
+
 library.add(fas, far, fab);
 router.beforeEach((to, from, next) => {
    document.title = to.meta.title || 'TradeTrove';
@@ -17,4 +19,8 @@ router.beforeEach((to, from, next) => {
 //    document.title = to.meta.title || 'TradeTrove';
 // });
 
-createApp(App).use(router).use(createPinia()).component('font-awesome-icon', FontAwesomeIcon).mount('#app');
+const app = createApp(App);
+
+// app.config.globalProperties.$config = config;
+
+app.use(router).use(createPinia()).component('font-awesome-icon', FontAwesomeIcon).mount('#app');
