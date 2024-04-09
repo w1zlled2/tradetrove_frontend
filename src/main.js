@@ -9,6 +9,11 @@ import { fab } from '@fortawesome/free-brands-svg-icons';
 import { createPinia } from 'pinia';
 import config from '../config';
 
+import VueTippy from 'vue-tippy';
+// or
+// import { plugin as VueTippy } from 'vue-tippy';
+import 'tippy.js/dist/tippy.css'; // optional for styling
+
 library.add(fas, far, fab);
 router.beforeEach((to, from, next) => {
    document.title = to.meta.title || 'TradeTrove';
@@ -23,4 +28,20 @@ const app = createApp(App);
 
 // app.config.globalProperties.$config = config;
 
-app.use(router).use(createPinia()).component('font-awesome-icon', FontAwesomeIcon).mount('#app');
+app.use(router)
+   .use(
+      VueTippy,
+      // optional
+      {
+         directive: 'tippy', // => v-tippy
+         component: 'tippy', // => <tippy/>
+         componentSingleton: 'tippy-singleton', // => <tippy-singleton/>,
+         defaultProps: {
+            placement: 'auto-end',
+            allowHTML: true,
+         }, // => Global default options * see all props
+      }
+   )
+   .use(createPinia())
+   .component('font-awesome-icon', FontAwesomeIcon)
+   .mount('#app');
