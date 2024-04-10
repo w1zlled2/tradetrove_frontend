@@ -1,4 +1,4 @@
-<!-- TODO: сделать проверку занятости почты при вводе ее (через 2 сек после остановки печати отправить запрос к API, и сделать API) -->
+<!-- Email busy/free доделал -->
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { useHostStore } from '@/stores/hostStore';
@@ -22,7 +22,6 @@ const passwordSubmit = ref('');
 const isPasswordSubmitShow = ref(false);
 const isPasswordSubmitFocused = ref(false);
 const isPasswordFocused = ref(false);
-const isEmailFocused = ref(false);
 const passwordValidateErrors = ref({
    minlength: { text: 'Минимальная длина пароля 8 символов', value: true },
    lowerCaseLetter: { text: 'Пароль должен содержать хотя бы одну строчную букву', value: true },
@@ -30,12 +29,6 @@ const passwordValidateErrors = ref({
    number: { text: 'Пароль должен содержать хотя бы одну цифру', value: true },
 });
 const isPasswordValidateError = ref(true);
-// const passwordValidateErrors = ref({
-//    'minlength': false,
-//    'lowerCaseLetter': false,
-//    'upperCaseLetter': false,
-//    'number': false,
-// });
 
 const isDisabledButton = computed(() => {
    if (
@@ -105,31 +98,64 @@ watch(password, () => {
       isPasswordValidateError.value = false;
    }
 });
+const isEmailFocused = ref(false);
 let emailTimeout = null;
-watch(isEmailFocused, async (focused) => {
-   if (!focused) {
-      if (email.value) {
-         emailTimeout = setTimeout(async () => {
-            const response = await fetch(`${host}/api/check-email`, {
-               method: 'POST',
-               body: JSON.stringify({ email: email.value }),
-               headers: {
-                  'Content-Type': 'application/json',
-               },
-            });
-            const data = await response?.json();
-            console.log(data);
-            if (data?.success) {
-               fieldErrors.value.email = null;
-            } else {
-               fieldErrors.value.email = ['Такой email уже зарегистрирован'];
-            }
-         }, 1000);
+const isEmailValidateLoading = ref(false);
+const isEmailFree = ref(null);
+const emailElement = ref(null);
+const emailFocus = async (e) => {
+   if (isEmailValidateLoading.value) {
+      isEmailValidateLoading.value = false;
+   }
+};
+const emailBlur = async (e) => {
+   // console.log(emailElement.value.validity.valid);
+   if (email.value && emailElement.value.validity.valid) {
+      isEmailValidateLoading.value = true;
+      const response = await fetch(`${host}/api/check-email`, {
+         method: 'POST',
+         body: JSON.stringify({ email: email.value }),
+         headers: {
+            'Content-Type': 'application/json',
+         },
+      });
+      const data = await response?.json();
+      isEmailValidateLoading.value = false;
+      console.log(data);
+      if (data?.success) {
+         fieldErrors.value.email = null;
+         isEmailFree.value = true;
+      } else {
+         fieldErrors.value.email = ['Такой email уже зарегистрирован'];
+         isEmailFree.value = false;
       }
    } else {
-      clearTimeout(emailTimeout);
    }
-});
+};
+// watch(isEmailFocused, async (focused) => {
+//    if (!focused) {
+//       if (email.value) {
+//          emailTimeout = setTimeout(async () => {
+//             const response = await fetch(`${host}/api/check-email`, {
+//                method: 'POST',
+//                body: JSON.stringify({ email: email.value }),
+//                headers: {
+//                   'Content-Type': 'application/json',
+//                },
+//             });
+//             const data = await response?.json();
+//             console.log(data);
+//             if (data?.success) {
+//                fieldErrors.value.email = null;
+//             } else {
+//                fieldErrors.value.email = ['Такой email уже зарегистрирован'];
+//             }
+//          }, 1000);
+//       }
+//    } else {
+//       clearTimeout(emailTimeout);
+//    }
+// });
 const sendRegisterForm = async (e) => {
    const form = e.target;
    const response = await fetch(`${host}/api/register`, {
@@ -166,10 +192,30 @@ const sendRegisterForm = async (e) => {
             <form @submit.prevent="sendRegisterForm" class="login__form form">
                <div class="form__fields">
                   <div :class="{ invalid: fieldErrors.email }" class="form__field form-field">
-                     <div class="form-field__label">Email</div>
+                     <div class="form-field__label form-field__label--email">
+                        <span>Email</span>
+                        <div
+                           v-if="isEmailValidateLoading"
+                           class="loader"
+                           style="width: 20px; height: 20px; --bor-w: 3px"
+                        ></div>
+                        <font-awesome-icon
+                           icon="fa-solid fa-check"
+                           style="color: var(--green-color)"
+                           v-if="isEmailFree === true && !isEmailValidateLoading"
+                        />
+                        <font-awesome-icon
+                           icon="fa-solid fa-xmark"
+                           style="color: var(--red-color)"
+                           v-if="isEmailFree === false && !isEmailValidateLoading"
+                        />
+                     </div>
+                     <!-- @blur="isEmailFocused = false" -->
+                     <!-- @focus="isEmailFocused = true" -->
                      <input
-                        @blur="isEmailFocused = false"
-                        @focus="isEmailFocused = true"
+                        ref="emailElement"
+                        @blur="emailBlur"
+                        @focus="emailFocus"
                         v-model="email"
                         name="email"
                         type="email"

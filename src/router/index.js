@@ -33,6 +33,12 @@ const routes = [
       meta: { title: 'Восстановить пароль' },
       component: () => import('../views/RestoreView.vue'),
    },
+   {
+      path: '/post/create',
+      name: 'post-create',
+      meta: { title: 'Создать объявление' },
+      component: () => import('../views/CreatePostView.vue'),
+   },
 ];
 
 const router = createRouter({
