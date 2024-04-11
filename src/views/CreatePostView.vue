@@ -26,14 +26,20 @@ watch(price, (value) => {
    ! Я сделал стандартизацию адреса, а надо 
    !"Автодополнение при вводе («подсказки»)" (https://dadata.ru/api/#address)
    --> */
-const dadataInput = ref('');
-const dadata = async () => {
+const addressSuggestion = ref([]);
+const dadata = async (address) => {
+   if (address.length <= 5) {
+      if (addressSuggestion.value.length > 0) {
+         addressSuggestion.value = [];
+      }
+      return;
+   }
    const response = await fetch(`${host}/api/dadata-validate`, {
       method: 'POST',
       headers: {
          'Content-Type': 'application/json',
       },
-      body: JSON.stringify([dadataInput.value]),
+      body: JSON.stringify({ address: address }),
    });
 
    // const response = await fetch('https://cleaner.dadata.ru/api/v1/clean/address', {
@@ -47,17 +53,120 @@ const dadata = async () => {
    //    body: JSON.stringify(['асбест чайковского'])
    // });
    console.log(response);
+   if (!response.ok) {
+      const data = await response?.json();
+      if (data?.message) {
+         alert('Ошибка: ' + data?.message);
+      } else {
+         alert('Ошибка: ' + response.status + ' ' + response.statusText);
+      }
+      return;
+   }
    const data = await response?.json();
+   if (!data) {
+      return;
+   }
    console.log(data);
-   const value = JSON.parse(data?.data)[0];
+   const value = data?.data;
+   const suggestions = value?.suggestions;
+   if (!suggestions) {
+      return;
+   }
+   addressSuggestion.value = [];
+   let i = 0;
+   for (const suggestion of suggestions) {
+      addressSuggestion.value.push(suggestion.value);
+   }
+   // console.log(addressSuggestion.value);
+   // addressSuggestion.value = value.suggestions;
+};
+
+let addressInputTimeout = null;
+const address = ref('');
+// watch(address, async (value) => {
+//    if (!addressSuggestion.value.find((suggestion) => suggestion === value)) {
+//       dadata(value);
+//    }
+// });
+const addressOnInput = (e) => {
+   clearTimeout(addressInputTimeout);
+   addressInputTimeout = setTimeout(() => {
+      const value = e.target.value;
+      if (!addressSuggestion.value.find((suggestion) => suggestion === value)) {
+         // ===============================
+         dadata(value);
+         // ===============================
+      }
+   }, 1000);
+};
+const setAddress = (value) => {
+   address.value = value;
+   addressSuggestion.value = [];
+};
+// const logogo = () => {
+//    console.log('asrdsfhg');
+//    addressSuggestion = [];
+// };
+document.addEventListener('click', (e) => {
+   const target = e.target;
+   if (!target.closest('.field-suggest__list') && !target.closest('.form-add-post__text-input')) {
+      addressSuggestion.value = [];
+   }
+});
+const phone = ref('');
+watch(phone, (value) => {
    console.log(value);
+});
+
+const isDropOver = ref(false);
+const fileInputRef = ref(null);
+const uploadedFiles = ref([]);
+const isDragOver = ref(false);
+const handleDragEnter = (e) => {
+   e.preventDefault();
+   isDropOver.value = true;
+};
+
+const handleDragLeave = () => {
+   isDropOver.value = false;
+};
+const processUploadedFiles = (files) => {
+   for (const file of files) {
+      if (file.type.startsWith('image/')) {
+         const reader = new FileReader();
+         reader.onload = (e) => {
+            uploadedFiles.value.push({ url: e.target.result });
+         };
+         reader.readAsDataURL(file);
+      } else {
+         console.log(
+            'Попытка загрузить файл типа: ' + file.type + ' (разрешены только изображения)'
+         );
+      }
+   }
+};
+
+const handleFileUpload = () => {
+   const files = fileInputRef.value.files;
+   processUploadedFiles(files);
+};
+
+const handleDrop = (e) => {
+   e.preventDefault();
+   isDropOver.value = false;
+   const files = e.dataTransfer.files;
+   processUploadedFiles(files);
+};
+
+const removeFile = (index) => {
+   uploadedFiles.value.splice(index, 1);
 };
 </script>
 
 <template>
    <div class="add-post">
-      <input v-model="dadataInput" type="text" class="input" />
-      <button class="btn" @click="dadata">test dadata.ru</button>
+      <!-- <input v-model="dadataInput" type="text" class="input" />
+      <button class="btn" @click="dadata">test dadata.ru</button> -->
       <div class="container add-post__content">
          <div class="breadcrumbs add-post__breadcrumbs">
             <div class="breadcrumbs__list">
@@ -88,7 +197,7 @@ const dadata = async () => {
                   <div class="form-add-post__field">
                      <div class="form-add-post__label">Состояние</div>
                      <div class="form-add-post__value">
-                        <div class="form-add-post__value-radio">
+                        <div class="form-add-post__value-radio-btn">
                            <div class="form-add-post__radio radio-btn">
                               <input
                                  checked
@@ -178,6 +287,8 @@ const dadata = async () => {
                      <div class="form-add-post__value">
                         <div class="form-add-post__files">
                            <input
+                              ref="fileInputRef"
+                              @change="handleFileUpload"
                               type="file"
                               name="files[]"
                               id="files"
@@ -186,21 +297,44 @@ const dadata = async () => {
                               class="form-add-post__files-input input-hidden"
                            />
                            <div class="form-add-post__files-list">
-                              <div class="form-add-post__files-label load-file load-file--preview">
-                                 <img src="../assets/post-img.jpg" alt="" />
-                              </div>
-                              <label for="files" class="form-add-post__files-label load-file">
-                                 <font-awesome-icon icon="image" />
-                              </label>
-                              <label for="files" class="form-add-post__files-label load-file">
-                                 <font-awesome-icon icon="image" />
-                              </label>
-                           </div>
-                           <div class="form-add-post__files-drop">
-                              <span class="form-add-post__files-drop-text"
-                                 >Перенесите сюда фото</span
+                              <div
+                                 v-for="(file, index) in uploadedFiles"
+                                 :key="index"
+                                 class="form-add-post__files-label load-file load-file--preview"
                               >
+                                 <button
+                                    type="button"
+                                    class="load-file__remove-btn"
+                                    @click="removeFile(index)"
+                                 >
+                                    <font-awesome-icon icon="xmark" />
+                                 </button>
+                                 <img :src="file.url" alt="" />
+                              </div>
+                              <!-- <div class="form-add-post__files-label load-file load-file--preview">
+                                 <button type="button" class="load-file__remove-btn">
+                                    <font-awesome-icon icon="xmark" />
+                                 </button>
+                                 <img src="../assets/post-img.jpg" alt="" />
+                              </div> -->
+                              <label for="files" class="form-add-post__files-label load-file">
+                                 <font-awesome-icon icon="plus" />
+                              </label>
                            </div>
+                           <label
+                              :class="{ over: isDropOver }"
+                              @dragstart.prevent="console.log('dragstart')"
+                              @dragover.prevent="console.log('dragover')"
+                              @dragenter.prevent="handleDragEnter"
+                              @dragleave="handleDragLeave"
+                              @drop="handleDrop"
+                              class="form-add-post__files-drop"
+                              for="files"
+                           >
+                              <span class="form-add-post__files-drop-text"
+                                 >Перенесите сюда фотографии для загрузки</span
+                              >
+                           </label>
                         </div>
                      </div>
                   </div>
@@ -209,16 +343,69 @@ const dadata = async () => {
             <div class="form-add-post__category">
                <h3 class="form-add-post__category-label">Место сделки</h3>
                <div class="form-add-post__category-list">
-                  <!-- TODO Использовать dadata.ru -->
                   <div class="form-add-post__field">
                      <div class="form-add-post__value">
-                        <div class="form-add-post__text">
+                        <div class="form-add-post__text form-add-post__text--address">
                            <input
+                              @input="addressOnInput"
+                              v-model="address"
                               type="text"
                               name="address"
                               class="form-add-post__text-input input"
                               placeholder="Начните вводить адрес"
+                              autocomplete="off"
                            />
+
+                           <div
+                              v-show="addressSuggestion.length"
+                              class="form-add-post__text-suggest field-suggest"
+                           >
+                              <div class="field-suggest__list">
+                                 <button
+                                    v-for="(suggestion, index) in addressSuggestion"
+                                    :key="index"
+                                    @click="setAddress(suggestion)"
+                                    type="button"
+                                    class="field-suggest__item"
+                                 >
+                                    {{ suggestion }}
+                                 </button>
+                              </div>
+                           </div>
+                           <!-- <div class="form-add-post__text-suggest field-suggest">
+                              <div class="field-suggest__list">
+                                 <button @click="setAddress('г. Асбест, ул. Чайковского, д. 14')" type="button" class="field-suggest__item">
+                                    г. Асбест, ул. Чайковского, д. 14
+                                 </button>
+                                 <button type="button" class="field-suggest__item">
+                                    Свердловская обл, пгт Малышева, тер промплощадка восточная
+                                    часть, д 2
+                                 </button>
+                                 <button type="button" class="field-suggest__item">
+                                    Свердловская обл, г Алапаевск, поселок Асбестовский
+                                 </button>
+                                 <button type="button" class="field-suggest__item">
+                                    г. Асбест, ул. Чайковского, д. 14
+                                 </button>
+                                 <button type="button" class="field-suggest__item">
+                                    Свердловская обл, пгт Малышева, тер промплощадка восточная
+                                    часть, д 2
+                                 </button>
+                                 <button type="button" class="field-suggest__item">
+                                    Свердловская обл, г Алапаевск, поселок Асбестовский
+                                 </button>
+                                 <button type="button" class="field-suggest__item">
+                                    г. Асбест, ул. Чайковского, д. 14
+                                 </button>
+                                 <button type="button" class="field-suggest__item">
+                                    Свердловская обл, пгт Малышева, тер промплощадка восточная
+                                    часть, д 2
+                                 </button>
+                                 <button type="button" class="field-suggest__item">
+                                    Свердловская обл, г Алапаевск, поселок Асбестовский
+                                 </button>
+                              </div>
+                           </div> -->
                         </div>
                      </div>
                   </div>
@@ -232,6 +419,9 @@ const dadata = async () => {
                      <div class="form-add-post__value">
                         <div class="form-add-post__text">
                            <input
+                              v-mask="'+7 (###) ###-##-##'"
+                              placeholder="+7 (___) ___-__-__"
+                              v-model="phone"
                               type="text"
                               name="title"
                               class="form-add-post__text-input input"
@@ -336,6 +526,7 @@ const dadata = async () => {
    }
    // .form-add-post__label
    &__label {
+      flex-shrink: 0;
       color: var(--dark-grey-color);
       width: 25%;
       padding-top: 16px;
@@ -346,6 +537,14 @@ const dadata = async () => {
    }
    // .form-add-post__text
    &__text {
+      position: relative;
+      &--address {
+         z-index: 3;
+         input {
+            position: relative;
+            z-index: 2;
+         }
+      }
       // .form-add-post__text--price
       &--price {
          position: relative;
@@ -359,6 +558,30 @@ const dadata = async () => {
             font-weight: 600;
             font-size: 18px;
          }
+      }
+   }
+   // .form-add-post__text-suggest
+   &__text-suggest {
+      z-index: 1;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      transition: 0.2s;
+      animation: opacity 0.1s ease;
+      padding-bottom: 70px;
+      // &.with-animation {
+      //    transition: .3s;
+      // }
+   }
+   @keyframes opacity {
+      0% {
+         // opacity: 0;
+         transform: translateY(-30px);
+      }
+      100% {
+         // opacity: 1;
+         transform: translateY(0);
       }
    }
    // .form-add-post__text-input
@@ -406,15 +629,37 @@ const dadata = async () => {
    }
    // .form-add-post__files-drop
    &__files-drop {
+      transition: 0.15s;
+      margin-top: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 200px;
+      border: 2px dashed var(--accent-color);
+      padding: 20px;
+      &.over, &:hover {
+         background-color: var(--accent-color-light);
+      }
    }
    // .form-add-post__files-drop-text
    &__files-drop-text {
+      pointer-events: none;
+      text-align: center;
+      font-size: 18px;
+      font-weight: 600;
+   }
+   // .form-add-post__value-radio-btn
+   &__value-radio-btn {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
    }
    // .form-add-post__value-radio
    &__value-radio {
       display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
+      flex-direction: column;
+      gap: 15px;
    }
    // .form-add-post__radio
    &__radio {
@@ -427,9 +672,40 @@ const dadata = async () => {
    }
    // .form-add-post__btns
    &__btns {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      font-size: 18px;
+      margin-bottom: 50px;
    }
    // .form-add-post__btn
    &__btn {
+   }
+}
+.field-suggest {
+   // .field-suggest__list
+   &__list {
+      background-color: #fff;
+      border: 1px solid #999;
+      border-radius: 5px;
+      box-shadow: 0 0 15px 2px rgba(0, 0, 0, 0.7);
+      display: flex;
+      flex-direction: column;
+   }
+   // .field-suggest__item
+   &__item {
+      padding: 10px;
+      transition: 0.1s;
+      font-weight: 500;
+      text-align: left;
+      &:hover {
+         background-color: #ddd;
+      }
+      &:not(:last-child) {
+         border-bottom: 1px solid #999;
+         // padding-bottom: 5px;
+         // margin-bottom: 10px;
+      }
    }
 }
 .input {
@@ -447,22 +723,67 @@ const dadata = async () => {
 .input-hidden {
 }
 .load-file {
-   background-color: #c9c9c9;
+   &:not(.load-file--preview) {
+      background-color: #c9c9c9;
+      svg {
+         font-size: 40px;
+      }
+      &:hover {
+         background-color: #b9b9b9;
+      }
+   }
    display: flex;
    align-items: center;
    justify-content: center;
    border-radius: 5px;
    font-size: 24px;
    transition: 0.2s;
-   &:hover {
-      background-color: #b9b9b9;
-   }
+
    // .load-file--preview
    &--preview {
+      border: 1px solid #999;
+      position: relative;
+      &::before {
+         transition: 0.2s;
+         opacity: 0;
+         content: '';
+         position: absolute;
+         top: 0;
+         right: 0;
+         bottom: 0;
+         left: 0;
+         background-color: rgba(0, 0, 0, 0.6);
+      }
+      &:hover {
+         &::before {
+            opacity: 1;
+         }
+         .load-file__remove-btn {
+            opacity: 1;
+            pointer-events: all;
+         }
+      }
       img {
          width: 100%;
          height: 100%;
-         object-fit: cover;
+         object-fit: contain;
+      }
+   }
+   // .load-file__remove-btn
+   &__remove-btn {
+      opacity: 0;
+      pointer-events: none;
+
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: var(--red-color);
+      font-size: 46px;
+      line-height: 1;
+      transition: 0.2s;
+      &:hover {
+         transform: translate(-50%, -50%) scale(1.2);
       }
    }
 }

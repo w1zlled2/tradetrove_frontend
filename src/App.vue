@@ -150,6 +150,7 @@ body {
    --black-color-hover: #464646;
    // --accent-color: #FF5722;
    // --accent-color: #ec492a;
+   --accent-color-light: rgba(140, 182, 88, 0.25);
    --accent-color: #8cb658;
    --accent-color-hover: #74974a;
    --accent-color-active: #668540;
@@ -540,6 +541,57 @@ body {
    width: 0;
    height: 0;
    opacity: 0;
-   pointer-events: none;   
+   pointer-events: none;
+}
+input[type='radio'] {
+   cursor: pointer;
+}
+.radio {
+   // display: flex;
+   // gap: 10px;
+}
+.radio__input {
+   width: 1.3em;
+   height: 1.3em;
+   background-color: var(--accent-color);
+   display: none;
+   &:checked + .radio__label {
+      &::after {
+         transform: translateY(-50%) scale(1);
+         opacity: 1;
+      }
+   }
+}
+.radio__label {
+   // line-height: 1.3em;
+   display: inline-block;
+   position: relative;
+   // display: flex;
+   // gap: 10px;
+   padding-left: calc(1.3em + 10px);
+   &::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 0;
+      transform: translateY(-50%);
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 1px solid var(--accent-color);
+   }
+   &::after {
+      transition: .1s;
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 5px;
+      opacity: 0;
+      transform: translateY(-50%) scale(0.5);
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background-color: var(--accent-color);
+   }
 }
 </style>

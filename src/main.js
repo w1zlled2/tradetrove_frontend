@@ -7,6 +7,7 @@ import { fas } from '@fortawesome/free-solid-svg-icons';
 import { far } from '@fortawesome/free-regular-svg-icons';
 import { fab } from '@fortawesome/free-brands-svg-icons';
 import { createPinia } from 'pinia';
+import VueTheMask from 'vue-the-mask';
 import config from '../config';
 
 import VueTippy from 'vue-tippy';
@@ -43,5 +44,6 @@ app.use(router)
       }
    )
    .use(createPinia())
+   .use(VueTheMask)
    .component('font-awesome-icon', FontAwesomeIcon)
    .mount('#app');
