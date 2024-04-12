@@ -119,6 +119,7 @@ const emailBlur = async (e) => {
             'Content-Type': 'application/json',
          },
       });
+      console.log(response);
       const data = await response?.json();
       isEmailValidateLoading.value = false;
       console.log(data);
@@ -202,12 +203,12 @@ const sendRegisterForm = async (e) => {
                         <font-awesome-icon
                            icon="fa-solid fa-check"
                            style="color: var(--green-color)"
-                           v-if="isEmailFree === true && !isEmailValidateLoading"
+                           v-if="isEmailFree === true && !isEmailValidateLoading && email"
                         />
                         <font-awesome-icon
                            icon="fa-solid fa-xmark"
                            style="color: var(--red-color)"
-                           v-if="isEmailFree === false && !isEmailValidateLoading"
+                           v-if="isEmailFree === false && !isEmailValidateLoading && email"
                         />
                      </div>
                      <!-- @blur="isEmailFocused = false" -->

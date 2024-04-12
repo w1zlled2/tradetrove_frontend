@@ -83,6 +83,9 @@ export const useAuthStore = defineStore('auth', {
       getUser(state) {
          return state.user;
       },
+      getToken(state) {
+         return state.user.token;
+      },
       getIsAuth(state) {
          return state.isAuth;
       },

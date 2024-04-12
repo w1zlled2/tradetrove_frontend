@@ -1,13 +1,11 @@
-<script setup>
-
-
-</script>
+<script setup></script>
 
 <template>
-  <div class="home">
-    <img alt="Vue logo" src="../assets/logo.png">
-  </div>
+   <div class="container">
+      <div class="home">
+         <img alt="Vue logo" src="../assets/logo.png" />
+      </div>
+   </div>
 </template>
 
-<style scoped>
-</style>
+<style scoped></style>

@@ -39,6 +39,12 @@ const routes = [
       meta: { title: 'Создать объявление' },
       component: () => import('../views/CreatePostView.vue'),
    },
+   {
+      path: '/profile',
+      name: 'profile',
+      meta: { title: 'Личный кабинет' },
+      component: () => import('../views/ProfileView.vue'),
+   },
 ];
 
 const router = createRouter({

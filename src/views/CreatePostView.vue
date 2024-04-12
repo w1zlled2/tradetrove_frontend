@@ -1,9 +1,23 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { useHostStore } from '@/stores/hostStore';
+import { useAuthStore } from '@/stores/authStore';
+import { useRouter } from 'vue-router';
+import MyModal from '@/components/MyModal.vue';
 
+const router = useRouter();
 const host = useHostStore().host;
+const auth = useAuthStore();
+
+const fieldErrors = ref({}); // address, category_id, description, price, title
+
+const title = ref('');
+const condition = ref('new'); // new/used
+const description = ref('');
+const phone = ref('');
+const connectType = ref('calls_messages'); // calls_messages/messages/calls
 const price = ref('');
+
 const formatNumberWithSpaces = (number) => {
    if (number[0] === '0' && number[1] !== '0') {
       number = number.slice(1);
@@ -14,18 +28,9 @@ watch(price, (value) => {
    price.value = value.replace(/\D/g, '');
    price.value = formatNumberWithSpaces(price.value);
 });
-/* <!-- TODO: dadata.ru не позволяет отправлять запрос через JS в браузере, 
-   TODO: надо сначала отправить запрос на Laravel,
-   TODO: с Laravel отправить запрос на dadata.ru, и с Laravel вернуть ответ, 
-   TODO: который пришел с dadata.ru
-
-   * dadata.ru запрос сделан, привязать его к инпуту адреса, 
-   * после того как пользователь перестал печатать отправить запрос
-   * и подумать куда и как его вставить
-   
-   ! Я сделал стандартизацию адреса, а надо 
-   !"Автодополнение при вводе («подсказки»)" (https://dadata.ru/api/#address)
-   --> */
+const priceClear = computed(() => {
+   return price.value.replace(/\s/g, '');
+});
 const addressSuggestion = ref([]);
 const dadata = async (address) => {
    if (address.length <= 5) {
@@ -113,13 +118,10 @@ document.addEventListener('click', (e) => {
       addressSuggestion.value = [];
    }
 });
-const phone = ref('');
-watch(phone, (value) => {
-   console.log(value);
-});
 
 const isDropOver = ref(false);
 const fileInputRef = ref(null);
+const uploadedFilesUrls = ref([]);
 const uploadedFiles = ref([]);
 const isDragOver = ref(false);
 const handleDragEnter = (e) => {
@@ -135,7 +137,7 @@ const processUploadedFiles = (files) => {
       if (file.type.startsWith('image/')) {
          const reader = new FileReader();
          reader.onload = (e) => {
-            uploadedFiles.value.push({ url: e.target.result });
+            uploadedFilesUrls.value.push({ url: e.target.result });
          };
          reader.readAsDataURL(file);
       } else {
@@ -149,6 +151,8 @@ const processUploadedFiles = (files) => {
 const handleFileUpload = () => {
    const files = fileInputRef.value.files;
    processUploadedFiles(files);
+   uploadedFiles.value = [...uploadedFiles.value, ...files];
+   console.log(uploadedFiles.value);
 };
 
 const handleDrop = (e) => {
@@ -156,14 +160,366 @@ const handleDrop = (e) => {
    isDropOver.value = false;
    const files = e.dataTransfer.files;
    processUploadedFiles(files);
+   uploadedFiles.value = [...uploadedFiles.value, ...files];
+   console.log(uploadedFiles.value);
 };
 
 const removeFile = (index) => {
-   uploadedFiles.value.splice(index, 1);
+   uploadedFilesUrls.value.splice(index, 1);
 };
+
+const category = ref('');
+const categoriesList = ref([]);
+const categoriesTree = ref([]);
+const isCategoriesLoading = ref(false);
+const isCategoryModalShow = ref(false);
+const selectedMainCategory = ref({});
+const categoryPath = ref('');
+const loadCategories = async () => {
+   isCategoriesLoading.value = true;
+   const response = await fetch(`${host}/api/category`);
+   const data = await response?.json();
+   isCategoriesLoading.value = false;
+   if (!response.ok) {
+      if (!data) {
+         alert('Ошибка загрузки категорий');
+      }
+   }
+   if (data) {
+      if (data.success) {
+         categoriesTree.value = buildCategoryTree(data.data);
+         selectedMainCategory.value = categoriesTree.value[0];
+         categoriesList.value = data.data;
+      } else {
+         alert('Ошибка загрузки категорий. ' + data?.message);
+      }
+   }
+};
+function buildCategoryTree(categories) {
+   const categoryMap = new Map();
+   const categoryTree = [];
+
+   categories.forEach((category) => {
+      categoryMap.set(category.id, { ...category, children: [] });
+   });
+
+   categories.forEach((category) => {
+      const { id, parent_category_id } = category;
+      const currentCategory = categoryMap.get(id);
+      if (parent_category_id === null) {
+         categoryTree.push(currentCategory);
+      } else {
+         const parentCategory = categoryMap.get(parent_category_id);
+         if (parentCategory) {
+            parentCategory.children.push(currentCategory);
+         }
+      }
+   });
+
+   return categoryTree;
+}
+const handleClickSelectCategory = () => {
+   isCategoryModalShow.value = true;
+   if (categoriesTree.value.length === 0) {
+      loadCategories();
+   }
+};
+const getCategoryPath = (category) => {
+   let path = category.name;
+   let parentCategory = category;
+   while (parentCategory.parent_category_id !== null) {
+      parentCategory = categoriesList.value.find(
+         (cat) => cat.id === parentCategory.parent_category_id
+      );
+      path = `${parentCategory.name} > ${path}`;
+   }
+   return path;
+};
+const selectCategory = (selectedCategory) => {
+   isCategoryModalShow.value = false;
+   category.value = selectedCategory;
+   // console.log(category.value);
+   categoryPath.value = getCategoryPath(selectedCategory);
+   console.log(categoryPath);
+};
+
+const validateFields = () => {
+   if (!category.value) {
+      fieldErrors.value.category_id = ['Выберите категорию'];
+   }
+   if (!title.value) {
+      fieldErrors.value.title = ['Заполните заголовок'];
+   }
+   if (!description.value) {
+      fieldErrors.value.description = ['Заполните описание'];
+   }
+   if (!address.value) {
+      fieldErrors.value.address = ['Заполните адрес'];
+   }
+   if ((connectType.value == 'calls_messages' || connectType.value == 'calls') && !phone.value) {
+      fieldErrors.value.phone = ['Введите номер телефон'];
+   }
+   if (fieldErrors.value && Object.keys(fieldErrors.value).length > 0) {
+      return false;
+   }
+   return true;
+};
+const sendCreatePostForm = async (isDraft = false) => {
+   const formData = new FormData();
+   for (const file of uploadedFiles.value) {
+      formData.append('files[]', file);
+   }
+   formData.append('category_id', category.value.id);
+   formData.append('title', title.value);
+   formData.append('condition', condition.value);
+   formData.append('description', description.value);
+   formData.append('price', priceClear.value);
+   formData.append('address', address.value);
+   formData.append('phone', phone.value);
+   formData.append('connect_type', connectType.value);
+   isDraft ? formData.append('status_id', 3) : formData.append('status_id', 2);
+
+   const response = await fetch(`${host}/api/post`, {
+      method: 'POST',
+      headers: {
+         // 'Content-Type': 'application/json',
+         Authorization: `Bearer ${auth.getToken}`,
+      },
+      body: formData,
+   });
+   const data = await response?.json();
+   if (!response.ok) {
+      if (data?.message) {
+      }
+      if (data?.errors) {
+         fieldErrors.value = data.errors;
+      }
+   }
+   if (data) {
+      if (data.success) {
+         if (isDraft) {
+            isPostDraftCreatedModalShow.value = true;
+         } else {
+            isPostCreatedModalShow.value = true;
+         }
+      }
+      console.log(data);
+   }
+};
+const isPostCreatedModalShow = ref(false);
+const createPost = async () => {
+   const token = auth.getToken;
+   if (!token) {
+      return;
+   }
+   fieldErrors.value = {};
+   if (validateFields()) {
+      sendCreatePostForm();
+   }
+
+   // const fieldErrors = ref({}); // address, category_id, description, title, phone
+   // if (!category.value) {
+   //    fieldErrors.value.category_id = ['Выберите категорию'];
+   // }
+   // if (!title.value) {
+   //    fieldErrors.value.title = ['Заполните заголовок'];
+   // }
+   // if (!description.value) {
+   //    fieldErrors.value.description = ['Заполните описание'];
+   // }
+   // if (!address.value) {
+   //    fieldErrors.value.address = ['Заполните адрес'];
+   // }
+   // if ((connectType.value == 'calls_messages' || connectType.value == 'calls') && !phone.value) {
+   //    fieldErrors.value.phone = ['Введите номер телефон'];
+   // }
+   // if (fieldErrors.value && Object.keys(fieldErrors.value).length > 0) {
+   //    return;
+   // }
+   // const formData = new FormData();
+   // for (const file of uploadedFiles.value) {
+   //    formData.append('files[]', file);
+   // }
+   // formData.append('category_id', category.value.id);
+   // formData.append('title', title.value);
+   // formData.append('condition', condition.value);
+   // formData.append('description', description.value);
+   // formData.append('price', priceClear.value);
+   // formData.append('address', address.value);
+   // formData.append('phone', phone.value);
+   // formData.append('connect_type', connectType.value);
+
+   // const response = await fetch(`${host}/api/post`, {
+   //    method: 'POST',
+   //    headers: {
+   //       // 'Content-Type': 'application/json',
+   //       Authorization: `Bearer ${auth.getToken}`,
+   //    },
+   //    body: formData,
+   // });
+   // const data = await response?.json();
+   // if (!response.ok) {
+   //    if (data?.message) {
+   //    }
+   //    if (data?.errors) {
+   //       fieldErrors.value = data.errors;
+   //    }
+   // }
+   // if (data) {
+   //    if (data.success) {
+   //       isPostCreatedModalShow.value = true;
+   //    }
+   //    console.log(data);
+   // }
+};
+
+const createDraftPost = () => {
+   const token = auth.getToken;
+   if (!token) {
+      return;
+   }
+   fieldErrors.value = {};
+   if (validateFields()) {
+      sendCreatePostForm(true);
+   }
+};
+
+const closePostCreatedModal = (isPostDraftCreatedModalShowObj) => {
+   console.log(isPostDraftCreatedModalShowObj);
+   isPostDraftCreatedModalShowObj.value = false;
+   router.push('/');
+};
+
+const isPostDraftCreatedModalShow = ref(false);
 </script>
 
 <template>
+   <MyModal v-model:show="isPostDraftCreatedModalShow">
+      <div class="success-modal content-modal">
+         <header class="success-modal__header content-modal__header">
+            <h2 class="success-modal__title content-modal__title">Черновик сохранен</h2>
+            <button
+               class="success-modal__close content-modal__close"
+               @click="closePostCreatedModal(isPostDraftCreatedModalShow)"
+               type="button"
+            >
+               <font-awesome-icon icon="xmark" />
+            </button>
+         </header>
+         <div class="success-modal__content">
+            <div class="success-modal__icon">
+               <font-awesome-icon icon="check" class="success-modal__icon-svg" />
+            </div>
+            <div class="success-modal__text">
+               <div class="success-modal__text-title">Объявление сохранено в черновики</div>
+               <div class="success-modal__text-subtitle">
+                  Вы можете продолжить заполнение объявления в личном кабинете
+               </div>
+            </div>
+            <p class="success-modal__text"></p>
+         </div>
+         <footer class="success-modal__footer">
+            <button class="btn btn--accent" @click="closePostCreatedModal">ОК</button>
+         </footer>
+      </div>
+   </MyModal>
+   <MyModal v-model:show="isPostCreatedModalShow">
+      <div class="success-modal content-modal">
+         <header class="success-modal__header content-modal__header">
+            <h2 class="success-modal__title content-modal__title">Объявление создано</h2>
+            <button
+               class="success-modal__close content-modal__close"
+               @click="closePostCreatedModal(isPostCreatedModalShow)"
+               type="button"
+            >
+               <font-awesome-icon icon="xmark" />
+            </button>
+         </header>
+         <div class="success-modal__content">
+            <div class="success-modal__icon">
+               <font-awesome-icon icon="check" class="success-modal__icon-svg" />
+            </div>
+            <div class="success-modal__text">
+               <div class="success-modal__text-title">
+                  Объявление успешно создано и отправлено на модерацию!
+               </div>
+               <div class="success-modal__text-subtitle">
+                  После проверки модератором ваше объявление увидят другие пользователи
+               </div>
+            </div>
+            <p class="success-modal__text"></p>
+         </div>
+         <footer class="success-modal__footer">
+            <button class="btn btn--accent" @click="closePostCreatedModal">ОК</button>
+         </footer>
+      </div>
+   </MyModal>
+   <MyModal v-model:show="isCategoryModalShow">
+      <div class="category-modal content-modal">
+         <header class="category-modal__header content-modal__header">
+            <h2 class="category-modal__title content-modal__title">Выбор категории</h2>
+            <button
+               class="category-modal__close content-modal__close"
+               @click="isCategoryModalShow = false"
+               type="button"
+            >
+               <font-awesome-icon icon="xmark" />
+            </button>
+         </header>
+         <!-- categoriesList -->
+         <div :class="{ center: isCategoriesLoading }" class="category-modal__content">
+            <div v-if="isCategoriesLoading" class="loader category-modal__loader"></div>
+            <div v-else class="category-modal__row">
+               <div class="category-modal__main-col main-category">
+                  <div class="main-category__list">
+                     <button
+                        :class="{
+                           'main-category__item--active':
+                              selectedMainCategory.id == mainCategory.id,
+                        }"
+                        v-for="mainCategory in categoriesTree"
+                        @click="selectedMainCategory = mainCategory"
+                        class="main-category__item"
+                     >
+                        {{ mainCategory.name }}
+                     </button>
+                     <!-- <div class="main-category__item">Имя категории</div>
+                     <div class="main-category__item">Имя категории</div>
+                     <div class="main-category__item">Имя категории</div>
+                     <div class="main-category__item">Имя категории</div> -->
+                  </div>
+               </div>
+               <div class="category-modal__second-col second-category">
+                  <div class="second-category__list">
+                     <div
+                        v-for="secondCategory in selectedMainCategory.children"
+                        class="second-category__item item-second-category"
+                     >
+                        <button
+                           @click="selectCategory(secondCategory)"
+                           class="item-second-category__title"
+                        >
+                           {{ secondCategory.name }}
+                        </button>
+                        <div
+                           v-if="secondCategory.children.length"
+                           class="item-second-category__list"
+                        >
+                           <button
+                              v-for="thirdCategory in secondCategory.children"
+                              @click="selectCategory(thirdCategory)"
+                              class="item-second-category__item link"
+                           >
+                              {{ thirdCategory.name }}
+                           </button>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+            </div>
+         </div>
+      </div>
+   </MyModal>
    <div class="add-post">
       <!-- <input v-model="dadataInput" type="text" class="input" />
       <button class="btn" @click="dadata">test dadata.ru</button> -->
@@ -180,6 +536,40 @@ const removeFile = (index) => {
          <h2 class="add-post__title title">Создать объявление</h2>
          <div class="add-post__form form-add-post">
             <div class="form-add-post__category">
+               <h3 class="form-add-post__category-label">Категория</h3>
+               <div class="form-add-post__category-list">
+                  <div class="form-add-post__field">
+                     <div class="form-add-post__value">
+                        <div class="form-add-post__text">
+                           <button
+                              class="btn form-add-post__text-select-category"
+                              @click="handleClickSelectCategory"
+                           >
+                              Выбрать категорию
+                           </button>
+                           <input
+                              :value="categoryPath"
+                              :class="{ invalid: fieldErrors.category_id }"
+                              disabled
+                              placeholder="Категория"
+                              type="text"
+                              name="title"
+                              class="form-add-post__text-input input"
+                           />
+                        </div>
+                     </div>
+                  </div>
+               </div>
+               <div v-if="fieldErrors.category_id" class="form-add-post__category-errors">
+                  <div
+                     v-for="error in fieldErrors.category_id"
+                     class="form-add-post__category-error color-red"
+                  >
+                     {{ error }}
+                  </div>
+               </div>
+            </div>
+            <div class="form-add-post__category">
                <h3 class="form-add-post__category-label">Параметры</h3>
                <div class="form-add-post__category-list">
                   <div class="form-add-post__field">
@@ -187,10 +577,20 @@ const removeFile = (index) => {
                      <div class="form-add-post__value">
                         <div class="form-add-post__text">
                            <input
+                              v-model.trim="title"
+                              :class="{ invalid: fieldErrors.title }"
                               type="text"
                               name="title"
                               class="form-add-post__text-input input"
                            />
+                        </div>
+                        <div v-if="fieldErrors.title" class="form-add-post__text-errors">
+                           <div
+                              v-for="error in fieldErrors.title"
+                              class="form-add-post__text-error color-red"
+                           >
+                              {{ error }}
+                           </div>
                         </div>
                      </div>
                   </div>
@@ -200,6 +600,7 @@ const removeFile = (index) => {
                         <div class="form-add-post__value-radio-btn">
                            <div class="form-add-post__radio radio-btn">
                               <input
+                                 v-model="condition"
                                  checked
                                  type="radio"
                                  name="condition"
@@ -213,6 +614,7 @@ const removeFile = (index) => {
                            </div>
                            <div class="form-add-post__radio radio-btn">
                               <input
+                                 v-model="condition"
                                  type="radio"
                                  name="condition"
                                  id="used"
@@ -260,9 +662,19 @@ const removeFile = (index) => {
                         <div class="form-add-post__value-textarea">
                            <div class="form-add-post__textarea">
                               <textarea
+                                 v-model.trim="description"
+                                 :class="{ invalid: fieldErrors.description }"
                                  name="description"
                                  class="form-add-post__textarea-input textarea"
                               ></textarea>
+                           </div>
+                           <div v-if="fieldErrors.description" class="form-add-post__text-errors">
+                              <div
+                                 v-for="error in fieldErrors.description"
+                                 class="form-add-post__text-error color-red"
+                              >
+                                 {{ error }}
+                              </div>
                            </div>
                         </div>
                      </div>
@@ -293,12 +705,12 @@ const removeFile = (index) => {
                               name="files[]"
                               id="files"
                               multiple
-                              accept="image/*"
+                              accept="image/jpeg, image/jpg, image/png, image/jfif"
                               class="form-add-post__files-input input-hidden"
                            />
                            <div class="form-add-post__files-list">
                               <div
-                                 v-for="(file, index) in uploadedFiles"
+                                 v-for="(file, index) in uploadedFilesUrls"
                                  :key="index"
                                  class="form-add-post__files-label load-file load-file--preview"
                               >
@@ -349,6 +761,7 @@ const removeFile = (index) => {
                            <input
                               @input="addressOnInput"
                               v-model="address"
+                              :class="{ invalid: fieldErrors.address }"
                               type="text"
                               name="address"
                               class="form-add-post__text-input input"
@@ -372,42 +785,16 @@ const removeFile = (index) => {
                                  </button>
                               </div>
                            </div>
-                           <!-- <div class="form-add-post__text-suggest field-suggest">
-                              <div class="field-suggest__list">
-                                 <button @click="setAddress('г. Асбест, ул. Чайковского, д. 14')" type="button" class="field-suggest__item">
-                                    г. Асбест, ул. Чайковского, д. 14
-                                 </button>
-                                 <button type="button" class="field-suggest__item">
-                                    Свердловская обл, пгт Малышева, тер промплощадка восточная
-                                    часть, д 2
-                                 </button>
-                                 <button type="button" class="field-suggest__item">
-                                    Свердловская обл, г Алапаевск, поселок Асбестовский
-                                 </button>
-                                 <button type="button" class="field-suggest__item">
-                                    г. Асбест, ул. Чайковского, д. 14
-                                 </button>
-                                 <button type="button" class="field-suggest__item">
-                                    Свердловская обл, пгт Малышева, тер промплощадка восточная
-                                    часть, д 2
-                                 </button>
-                                 <button type="button" class="field-suggest__item">
-                                    Свердловская обл, г Алапаевск, поселок Асбестовский
-                                 </button>
-                                 <button type="button" class="field-suggest__item">
-                                    г. Асбест, ул. Чайковского, д. 14
-                                 </button>
-                                 <button type="button" class="field-suggest__item">
-                                    Свердловская обл, пгт Малышева, тер промплощадка восточная
-                                    часть, д 2
-                                 </button>
-                                 <button type="button" class="field-suggest__item">
-                                    Свердловская обл, г Алапаевск, поселок Асбестовский
-                                 </button>
-                              </div>
-                           </div> -->
                         </div>
                      </div>
+                  </div>
+               </div>
+               <div v-if="fieldErrors.address" class="form-add-post__text-errors">
+                  <div
+                     v-for="error in fieldErrors.address"
+                     class="form-add-post__text-error color-red"
+                  >
+                     {{ error }}
                   </div>
                </div>
             </div>
@@ -415,26 +802,12 @@ const removeFile = (index) => {
                <h3 class="form-add-post__category-label">Контакты</h3>
                <div class="form-add-post__category-list">
                   <div class="form-add-post__field">
-                     <div class="form-add-post__label">Телефон</div>
-                     <div class="form-add-post__value">
-                        <div class="form-add-post__text">
-                           <input
-                              v-mask="'+7 (###) ###-##-##'"
-                              placeholder="+7 (___) ___-__-__"
-                              v-model="phone"
-                              type="text"
-                              name="title"
-                              class="form-add-post__text-input input"
-                           />
-                        </div>
-                     </div>
-                  </div>
-                  <div class="form-add-post__field">
                      <div class="form-add-post__label">Способ связи</div>
                      <div class="form-add-post__value">
                         <div class="form-add-post__value-radio">
                            <div class="form-add-post__radio radio">
                               <input
+                                 v-model="connectType"
                                  checked
                                  type="radio"
                                  name="connect_type"
@@ -450,6 +823,7 @@ const removeFile = (index) => {
                            </div>
                            <div class="form-add-post__radio radio">
                               <input
+                                 v-model="connectType"
                                  type="radio"
                                  name="connect_type"
                                  id="calls"
@@ -462,6 +836,7 @@ const removeFile = (index) => {
                            </div>
                            <div class="form-add-post__radio radio">
                               <input
+                                 v-model="connectType"
                                  type="radio"
                                  name="connect_type"
                                  id="messages"
@@ -475,11 +850,52 @@ const removeFile = (index) => {
                         </div>
                      </div>
                   </div>
+
+                  <!-- v-if="connectType === 'calls_messages' || connectType === 'calls'" -->
+                  <div
+                     :class="{
+                        active: connectType === 'calls_messages' || connectType === 'calls',
+                     }"
+                     class="form-add-post__field form-add-post__field--phone"
+                  >
+                     <div class="form-add-post__label">Телефон</div>
+                     <div class="form-add-post__value">
+                        <div class="form-add-post__text">
+                           <input
+                              v-mask="'+7 (###) ###-##-##'"
+                              placeholder="+7 (___) ___-__-__"
+                              :class="{ invalid: fieldErrors.phone }"
+                              v-model="phone"
+                              type="text"
+                              name="title"
+                              class="form-add-post__text-input input"
+                           />
+                        </div>
+                        <div
+                           v-if="
+                              (connectType === 'calls_messages' || connectType === 'calls') &&
+                              fieldErrors.phone
+                           "
+                           class="form-add-post__text-errors"
+                        >
+                           <div
+                              v-for="error in fieldErrors.phone"
+                              class="form-add-post__text-error color-red"
+                           >
+                              {{ error }}
+                           </div>
+                        </div>
+                     </div>
+                  </div>
                </div>
             </div>
             <div class="form-add-post__btns">
-               <button type="button" class="form-add-post__btn btn btn--dark">Создать</button>
-               <button type="button" class="form-add-post__btn btn">Сохранить в черновик</button>
+               <button @click="createPost" type="button" class="form-add-post__btn btn btn--dark">
+                  Создать
+               </button>
+               <button @click="createDraftPost" type="button" class="form-add-post__btn btn">
+                  Сохранить в черновик
+               </button>
             </div>
          </div>
       </div>
@@ -507,6 +923,9 @@ const removeFile = (index) => {
 .form-add-post {
    // .form-add-post__category
    &__category {
+      &:not(:last-child) {
+         margin-bottom: 70px;
+      }
    }
    // .form-add-post__category-label
    &__category-label {
@@ -518,7 +937,17 @@ const removeFile = (index) => {
       display: flex;
       flex-direction: column;
       gap: 15px;
-      margin-bottom: 70px;
+   }
+   // .form-add-post__category-errors
+   &__category-errors {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+   }
+   // .form-add-post__category-error
+   &__category-error {
+      text-align: center;
    }
    // .form-add-post__field
    &__field {
@@ -559,6 +988,21 @@ const removeFile = (index) => {
             font-size: 18px;
          }
       }
+   }
+   // .form-add-post__text-errors
+   &__text-errors {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+   }
+   // .form-add-post__text-error
+   &__text-error {
+      text-align: center;
+   }
+   // .form-add-post__text-select-category
+   &__text-select-category {
+      margin-bottom: 15px;
    }
    // .form-add-post__text-suggest
    &__text-suggest {
@@ -637,8 +1081,10 @@ const removeFile = (index) => {
       width: 100%;
       height: 200px;
       border: 2px dashed var(--accent-color);
+      border-radius: 5px;
       padding: 20px;
-      &.over, &:hover {
+      &.over,
+      &:hover {
          background-color: var(--accent-color-light);
       }
    }
@@ -677,6 +1123,7 @@ const removeFile = (index) => {
       justify-content: center;
       font-size: 18px;
       margin-bottom: 50px;
+      flex-wrap: wrap;
    }
    // .form-add-post__btn
    &__btn {
