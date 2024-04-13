@@ -166,6 +166,7 @@ const handleDrop = (e) => {
 
 const removeFile = (index) => {
    uploadedFilesUrls.value.splice(index, 1);
+   uploadedFiles.value.splice(index, 1);
 };
 
 const category = ref('');
@@ -256,8 +257,12 @@ const validateFields = () => {
    if (!address.value) {
       fieldErrors.value.address = ['Заполните адрес'];
    }
-   if ((connectType.value == 'calls_messages' || connectType.value == 'calls') && !phone.value) {
-      fieldErrors.value.phone = ['Введите номер телефон'];
+   if (connectType.value == 'calls_messages' || connectType.value == 'calls') {
+      if (!phone.value) {
+         fieldErrors.value.phone = ['Введите номер телефон'];
+      } else if (!/^\+7 \(\d{3}\) \d{3}-\d{2}-\d{2}$/.test(phone.value)) {
+         fieldErrors.value.phone = ['Неверный формат номера телефона'];
+      }
    }
    if (fieldErrors.value && Object.keys(fieldErrors.value).length > 0) {
       return false;
@@ -310,6 +315,8 @@ const isPostCreatedModalShow = ref(false);
 const createPost = async () => {
    const token = auth.getToken;
    if (!token) {
+      alert('Вы не авторизованы');
+      router.push('/login');
       return;
    }
    fieldErrors.value = {};
@@ -376,6 +383,8 @@ const createPost = async () => {
 const createDraftPost = () => {
    const token = auth.getToken;
    if (!token) {
+      alert('Вы не авторизованы');
+      router.push('/login');
       return;
    }
    fieldErrors.value = {};
